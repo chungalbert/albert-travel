@@ -1,6 +1,9 @@
 (function () {
   const app = document.getElementById("app");
   const store = window.TravelStore;
+  const ADMIN_PASSWORD = "123456789";
+  const ADMIN_KEY = "albert-travel-admin";
+  const UNLOCK_PREFIX = "albert-travel-unlock:";
 
   function esc(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -56,6 +59,7 @@
     if (parts[0] === "trip" && parts[1]) return { name: "trip", id: decodeURIComponent(parts[1]) };
     if (parts[0] === "new") return { name: "edit", id: null };
     if (parts[0] === "edit" && parts[1]) return { name: "edit", id: decodeURIComponent(parts[1]) };
+    if (parts[0] === "admin") return { name: "admin" };
     return { name: "home" };
   }
 
@@ -87,8 +91,32 @@
         }
       ],
       extraPages: [],
-      bookings: []
+      bookings: [],
+      password: ""
     };
+  }
+
+  function tripPassword(trip) {
+    return String((trip && trip.password) || "").trim();
+  }
+
+  function isAdmin() {
+    return sessionStorage.getItem(ADMIN_KEY) === "1";
+  }
+
+  function setAdmin(on) {
+    if (on) sessionStorage.setItem(ADMIN_KEY, "1");
+    else sessionStorage.removeItem(ADMIN_KEY);
+  }
+
+  function isUnlocked(trip) {
+    if (!tripPassword(trip)) return true;
+    if (isAdmin()) return true;
+    return sessionStorage.getItem(UNLOCK_PREFIX + trip.id) === "1";
+  }
+
+  function unlockTrip(trip) {
+    sessionStorage.setItem(UNLOCK_PREFIX + trip.id, "1");
   }
 
   function dayCountLabel(trip) {
@@ -108,6 +136,7 @@
       </section>
       <div class="home-actions">
         <button class="btn primary" data-go="#/new">新增旅遊專案</button>
+        <button class="btn ghost" data-go-admin="#/admin">管理員</button>
       </div>
       ${trips.map((trip) => `
         <a class="trip-card" href="#/trip/${encodeURIComponent(trip.id)}">
@@ -117,12 +146,114 @@
             <span class="chip">${esc(dayCountLabel(trip))}</span>
             <span class="chip">${trip.builtin ? "內建範本" : "線上專案"}</span>
             ${trip.city ? `<span class="chip">${esc(trip.city)}</span>` : ""}
+            ${tripPassword(trip) ? `<span class="chip">有密碼</span>` : ""}
           </div>
         </a>
       `).join("")}
       <p class="hint">不需登入。新增的專案會出現在這個網站上，其他人打開同一個網址也看得到。</p>
     `;
     app.querySelector("[data-go]").onclick = () => go("#/new");
+    app.querySelector("[data-go-admin]").onclick = () => go("#/admin");
+  }
+
+  function renderGate(trip, nextHash) {
+    document.body.className = "home";
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="topbar-left"><a class="btn ghost" href="#/">全部專案</a></div>
+      </div>
+      <h1>${esc(trip.title || "未命名專案")}</h1>
+      <p class="sub">這個專案有密碼，輸入後才能查看。</p>
+      <div class="editor-card" style="margin-top:16px">
+        <div class="field">
+          <label>專案密碼</label>
+          <input id="gatePassword" type="password" autocomplete="current-password">
+        </div>
+        <p class="error" id="gateError" hidden>密碼不對，再試一次。</p>
+        <div class="editor-save">
+          <button class="btn primary" id="gateSubmit">進入專案</button>
+        </div>
+      </div>
+    `;
+    const input = document.getElementById("gatePassword");
+    const submit = () => {
+      if (input.value.trim() === tripPassword(trip)) {
+        unlockTrip(trip);
+        go(nextHash);
+        render();
+        return;
+      }
+      document.getElementById("gateError").hidden = false;
+      input.focus();
+    };
+    document.getElementById("gateSubmit").onclick = submit;
+    input.onkeydown = (event) => {
+      if (event.key === "Enter") submit();
+    };
+    input.focus();
+  }
+
+  function renderAdmin() {
+    document.body.className = "home";
+    if (!isAdmin()) {
+      app.innerHTML = `
+        <div class="topbar">
+          <div class="topbar-left"><a class="btn ghost" href="#/">全部專案</a></div>
+        </div>
+        <h1>管理員</h1>
+        <p class="sub">輸入管理員密碼後，可以看到每個專案的密碼。</p>
+        <div class="editor-card" style="margin-top:16px">
+          <div class="field">
+            <label>管理員密碼</label>
+            <input id="adminPassword" type="password" autocomplete="current-password">
+          </div>
+          <p class="error" id="adminError" hidden>密碼不對，再試一次。</p>
+          <div class="editor-save">
+            <button class="btn primary" id="adminSubmit">進入</button>
+          </div>
+        </div>
+      `;
+      const input = document.getElementById("adminPassword");
+      const submit = () => {
+        if (input.value === ADMIN_PASSWORD) {
+          setAdmin(true);
+          renderAdmin();
+          return;
+        }
+        document.getElementById("adminError").hidden = false;
+        input.focus();
+      };
+      document.getElementById("adminSubmit").onclick = submit;
+      input.onkeydown = (event) => {
+        if (event.key === "Enter") submit();
+      };
+      input.focus();
+      return;
+    }
+
+    const trips = allTrips();
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="topbar-left"><a class="btn ghost" href="#/">全部專案</a></div>
+        <div class="topbar-right"><button class="btn ghost" id="adminLogout">退出管理員</button></div>
+      </div>
+      <h1>所有專案密碼</h1>
+      <p class="sub">只有管理員看得到這頁。內建範本沒有專案密碼。</p>
+      ${trips.map((trip) => `
+        <a class="trip-card" href="#/trip/${encodeURIComponent(trip.id)}">
+          <h2>${esc(trip.title || "未命名專案")}</h2>
+          <p class="sub">${esc(trip.subtitle || "還沒有副標題")}</p>
+          <div class="chips">
+            <span class="chip">${trip.builtin ? "內建範本" : "線上專案"}</span>
+            <span class="chip">${tripPassword(trip) ? "密碼：" + tripPassword(trip) : "沒有設定密碼"}</span>
+          </div>
+        </a>
+      `).join("")}
+    `;
+    document.getElementById("adminLogout").onclick = () => {
+      setAdmin(false);
+      go("#/");
+    };
   }
 
   function hotelBlock(trip) {
@@ -311,12 +442,13 @@
 
   function field(label, name, value, extra) {
     const multiline = extra === "area";
+    const secret = extra === "password";
     return `
       <div class="field">
         <label>${esc(label)}</label>
         ${multiline
           ? `<textarea name="${esc(name)}">${esc(value || "")}</textarea>`
-          : `<input name="${esc(name)}" value="${esc(value || "")}">`}
+          : `<input name="${esc(name)}" ${secret ? 'type="password" autocomplete="new-password"' : ""} value="${esc(value || "")}">`}
       </div>
     `;
   }
@@ -333,6 +465,7 @@
     draft.stats = draft.stats || [];
     draft.overviewDays = draft.overviewDays || [];
     draft.transport = draft.transport || [];
+    draft.password = draft.password || "";
 
     function paint() {
       app.innerHTML = `
@@ -357,6 +490,8 @@
               ${field("封面標籤（如 5 天 4 夜）", "coverTag", draft.coverTag)}
             </div>
             ${field("封面說明", "coverMeta", draft.coverMeta)}
+            ${field("專案密碼（可留空）", "password", draft.password, "password")}
+            <p class="sub">設定後，其他人要先輸入這個密碼才能看這個專案。管理員可在首頁查看所有專案密碼。</p>
           </div>
         </div>
 
@@ -617,6 +752,7 @@
       saveBtn.disabled = true;
       saveBtn.textContent = "儲存中…";
       await upsertUserTrip(draft);
+      unlockTrip(draft);
       go("#/trip/" + encodeURIComponent(draft.id));
     };
 
@@ -638,13 +774,34 @@
       renderHome();
       return;
     }
+    if (route.name === "admin") {
+      renderAdmin();
+      return;
+    }
     if (route.name === "edit") {
-      renderEdit(route.id ? findTrip(route.id) : null);
+      if (!route.id) {
+        renderEdit(null);
+        return;
+      }
+      const editing = findTrip(route.id);
+      if (!editing) {
+        app.innerHTML = `<h1>找不到這個專案</h1><p class="sub">可能已被刪除，或線上資料還沒載入完成。</p><p><a class="btn" href="#/">回全部專案</a></p>`;
+        return;
+      }
+      if (!isUnlocked(editing)) {
+        renderGate(editing, "#/edit/" + encodeURIComponent(editing.id));
+        return;
+      }
+      renderEdit(editing);
       return;
     }
     const trip = findTrip(route.id);
     if (!trip) {
       app.innerHTML = `<h1>找不到這個專案</h1><p class="sub">可能已被刪除，或線上資料還沒載入完成。</p><p><a class="btn" href="#/">回全部專案</a></p>`;
+      return;
+    }
+    if (!isUnlocked(trip)) {
+      renderGate(trip, "#/trip/" + encodeURIComponent(trip.id));
       return;
     }
     renderTrip(trip);

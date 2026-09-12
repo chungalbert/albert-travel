@@ -266,6 +266,11 @@ a.map {
   font-size: 13px;
   text-align: center;
 }
+.error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0 0 10px;
+}
 
 .file-btn { position: relative; overflow: hidden; }
 .file-btn input {
