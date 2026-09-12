@@ -1,0 +1,35 @@
+# Albert Travel
+
+手機上也能看的旅遊行程網站。打開網址就能用，不需登入、不用匯入檔案。
+
+長沙五日行程是內建範本。任何人都可以在網站上新增旅遊專案，新增後其他人打開同一個網址也看得到。
+
+線上網站：https://chungalbert.github.io/albert-travel/
+
+## 本機預覽
+
+```bash
+py -3 -m http.server 8080
+```
+
+然後打開 http://127.0.0.1:8080/
+
+## 部署到 GitHub Pages
+
+Repo 設為公開後：
+
+1. Settings → Pages
+2. Source 選 `GitHub Actions`，或 `Deploy from a branch`（`main` / `/ (root)`）
+3. 網址會是 `https://chungalbert.github.io/albert-travel/`
+
+## 怎麼用
+
+- **看行程**：首頁點進專案。底部有每日、總覽、預約，以及範本自己的分頁。
+- **新增專案**：首頁按「新增旅遊專案」，填表單後儲存。不需登入。
+- **改內建範本**：打開長沙行程後按「複製並編輯」，不會改到原本那份。
+
+## 第一版範圍
+
+已包含：專案列表、長沙完整範本、線上新增 / 編輯 / 刪除、高德地圖連結、GitHub Pages。
+
+尚未包含：帳號權限、防止陌生人亂改。這個版本任何人打開網站都可以新增或刪除非內建專案。
