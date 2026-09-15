@@ -23,9 +23,28 @@
     return (window.BUILTIN_TRIPS || []).map((trip) => ({ ...trip, builtin: true }));
   }
 
+  function isBuiltinId(id) {
+    return (window.BUILTIN_TRIPS || []).some((trip) => trip.id === id);
+  }
+
   function allTrips() {
-    const users = store.cacheGet().map((trip) => ({ ...trip, builtin: false }));
-    return [...builtinTrips(), ...users];
+    const byId = {};
+    builtinTrips().forEach((trip) => {
+      byId[trip.id] = trip;
+    });
+    (store.cacheGet() || []).forEach((trip) => {
+      if (!trip || !trip.id) return;
+      byId[trip.id] = { ...trip, builtin: isBuiltinId(trip.id) };
+    });
+    const builtinIds = (window.BUILTIN_TRIPS || []).map((trip) => trip.id);
+    const seen = new Set();
+    const ordered = [];
+    builtinIds.concat(Object.keys(byId)).forEach((id) => {
+      if (seen.has(id) || !byId[id]) return;
+      seen.add(id);
+      ordered.push(byId[id]);
+    });
+    return ordered;
   }
 
   function findTrip(id) {
@@ -335,9 +354,7 @@
         </div>
         <div class="topbar-right">
           <button class="btn" id="copyTrip">複製</button>
-          ${trip.builtin
-            ? `<button class="btn" id="editTrip">編輯</button>`
-            : `<a class="btn" href="#/edit/${encodeURIComponent(trip.id)}">編輯</a>`}
+          <a class="btn" href="#/edit/${encodeURIComponent(trip.id)}">編輯</a>
         </div>
       </div>
       <h1>${esc(trip.title)}</h1>
@@ -424,33 +441,20 @@
       window.scrollTo(0, 0);
     };
 
-    async function copyTrip(openEditor) {
-      const copy = clone(trip);
-      copy.id = "trip-" + Date.now();
-      copy.builtin = false;
-      copy.title = (trip.title || "未命名專案") + "（我的副本）";
-      delete copy._crudId;
-      delete copy._id;
-      await upsertUserTrip(copy);
-      unlockTrip(copy);
-      go((openEditor ? "#/edit/" : "#/trip/") + encodeURIComponent(copy.id));
-    }
-
     const copyBtn = document.getElementById("copyTrip");
     if (copyBtn) {
       copyBtn.onclick = async () => {
         copyBtn.disabled = true;
         copyBtn.textContent = "複製中…";
-        await copyTrip(false);
-      };
-    }
-
-    const editTripBtn = document.getElementById("editTrip");
-    if (editTripBtn) {
-      editTripBtn.onclick = async () => {
-        editTripBtn.disabled = true;
-        editTripBtn.textContent = "準備中…";
-        await copyTrip(true);
+        const copy = clone(trip);
+        copy.id = "trip-" + Date.now();
+        copy.builtin = false;
+        copy.title = (trip.title || "未命名專案") + "（我的副本）";
+        delete copy._crudId;
+        delete copy._id;
+        await upsertUserTrip(copy);
+        unlockTrip(copy);
+        go("#/trip/" + encodeURIComponent(copy.id));
       };
     }
   }
@@ -489,7 +493,7 @@
             <a class="btn ghost" href="${isNew ? "#/" : "#/trip/" + encodeURIComponent(draft.id)}">返回</a>
           </div>
           <div class="topbar-right">
-            ${!isNew && !draft.builtin ? `<button class="btn danger" id="deleteTrip">刪除</button>` : ""}
+            ${!isNew && !isBuiltinId(draft.id) ? `<button class="btn danger" id="deleteTrip">刪除</button>` : ""}
           </div>
         </div>
         <h1>${isNew ? "新增旅遊專案" : "編輯專案"}</h1>
