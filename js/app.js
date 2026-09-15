@@ -334,8 +334,9 @@
           <a class="btn ghost" href="#/">全部專案</a>
         </div>
         <div class="topbar-right">
+          <button class="btn" id="copyTrip">複製</button>
           ${trip.builtin
-            ? `<button class="btn" id="copyTrip">複製並編輯</button>`
+            ? `<button class="btn" id="editTrip">編輯</button>`
             : `<a class="btn" href="#/edit/${encodeURIComponent(trip.id)}">編輯</a>`}
         </div>
       </div>
@@ -423,19 +424,33 @@
       window.scrollTo(0, 0);
     };
 
+    async function copyTrip(openEditor) {
+      const copy = clone(trip);
+      copy.id = "trip-" + Date.now();
+      copy.builtin = false;
+      copy.title = (trip.title || "未命名專案") + "（我的副本）";
+      delete copy._crudId;
+      delete copy._id;
+      await upsertUserTrip(copy);
+      unlockTrip(copy);
+      go((openEditor ? "#/edit/" : "#/trip/") + encodeURIComponent(copy.id));
+    }
+
     const copyBtn = document.getElementById("copyTrip");
     if (copyBtn) {
       copyBtn.onclick = async () => {
         copyBtn.disabled = true;
         copyBtn.textContent = "複製中…";
-        const copy = clone(trip);
-        copy.id = "trip-" + Date.now();
-        copy.builtin = false;
-        copy.title = (trip.title || "未命名專案") + "（我的副本）";
-        delete copy._crudId;
-        delete copy._id;
-        await upsertUserTrip(copy);
-        go("#/edit/" + encodeURIComponent(copy.id));
+        await copyTrip(false);
+      };
+    }
+
+    const editTripBtn = document.getElementById("editTrip");
+    if (editTripBtn) {
+      editTripBtn.onclick = async () => {
+        editTripBtn.disabled = true;
+        editTripBtn.textContent = "準備中…";
+        await copyTrip(true);
       };
     }
   }
